@@ -54,7 +54,7 @@ def four_point_transform(image, pts):
     return cv2.rectangle(frame, (int(pt_1[0]),int(pt_1[1])), (int(pt_2[0]),int(pt_2[1])), color=(0, 0, 255), thickness=3)
  """
 ##########################################################################################################################################
-frame = cv2.imread("test_img_3/File_000.jpeg")
+frame = cv2.imread("test_img_3/File_015.jpeg")
 
 frame = cv2.resize(frame, (0,0), None,0.25,0.25)
 
@@ -66,7 +66,7 @@ arucoParameters = aruco.DetectorParameters_create()
 corners, ids, rejectedImgPoints = aruco.detectMarkers(
     gray, aruco_dict, parameters=arucoParameters)
 #print(corners)
-frame = aruco.drawDetectedMarkers(frame, corners)
+#frame = aruco.drawDetectedMarkers(frame, corners)
 
 #print(len(corners))
 
@@ -84,7 +84,6 @@ height, width, _ = frame.shape
 top_left_point = all_cords[closest_point([0,0], all_cords)]
 top_right_point = all_cords[closest_point([width, 0], all_cords)]
 
-
 bottom_left_point = all_cords[closest_point([0,height], all_cords)]
 bottom_right_point = all_cords[closest_point([width, height], all_cords)]
 
@@ -92,28 +91,96 @@ closest_2_middle = []
 for square in corners:
     closest_2_middle.append(square[0][closest_point([width*0.5, height*0.5], square[0])].tolist())
 
+""" 
 for pt in closest_2_middle:
-    frame = mark_point(pt, frame)
+    frame = mark_point(pt, frame) 
+"""
 
-
+ref_pts = np.array([top_left_point, top_right_point, bottom_left_point, bottom_right_point])
 pts = np.array(closest_2_middle)
 warped = four_point_transform(frame, pts)   
+size_ref = four_point_transform(frame, ref_pts)   
 #warped = cv2.resize(warped, (0,0), None,0.25,0.25)
 
-gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-gray = cv2.GaussianBlur(gray, (7, 7), 0)
 
-edged = cv2.Canny(gray, 30, 100)
-edged = cv2.dilate(edged, None, iterations=3)
-edged = cv2.erode(edged, None, iterations=3)
+# find markers to get a size ref
+size_ref_gray = cv2.cvtColor(size_ref, cv2.COLOR_BGR2GRAY)
+size_ref_arucoParameters = aruco.DetectorParameters_create()
+size_ref_arucoParameters.minDistanceToBorder = 0
+size_ref_arucoParameters.adaptiveThreshWinSizeMax = 400
+size_ref_aruco_dict = aruco.Dictionary_get(aruco.DICT_7X7_50)
 
-contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL,
+size_ref_corners, _, _ = aruco.detectMarkers(
+    size_ref_gray, size_ref_aruco_dict, parameters=size_ref_arucoParameters)
+
+size_ref = aruco.drawDetectedMarkers(size_ref, size_ref_corners)
+
+cv2.imshow("size ref",size_ref)
+
+#calc pixel to mm^2 ratio
+tot_pixel_area_markers = 0
+marker_mm_area = 50*50
+
+for corner in size_ref_corners:
+    tot_pixel_area_markers += cv2.contourArea(corner)
+
+average_marker_area = tot_pixel_area_markers / len(size_ref_corners)
+pixels_per_mm_sq = average_marker_area / marker_mm_area
+
+
+# find areas with similar color 
+frame_hsv = cv2.cvtColor(warped, cv2.COLOR_RGB2HSV)
+h, s, v = cv2.split(frame_hsv)
+
+
+# code for shifting
+#s = (s + 30) % 180
+
+cv2.imshow("h", h)
+cv2.imshow("v", v)
+
+""" 
+funkar ganska bra
+s = cv2.GaussianBlur(s, (7, 7), 0)
+cv2.imshow("s", s)
+canny_s = cv2.Canny(s, 100, 50) 
+
+"""
+
+s = cv2.GaussianBlur(s, (7, 7), 0)
+cv2.imshow("s", s)
+canny_s = cv2.Canny(s, 100, 50)
+
+#canny_s = cv2.Canny(s,255, 255/3)
+canny_s = cv2.dilate(canny_s, None, iterations=1)
+cv2.imshow("canny_s", canny_s)
+
+
+contours, hierarchy  = cv2.findContours(canny_s.copy(), cv2.RETR_TREE ,
 	cv2.CHAIN_APPROX_SIMPLE)
 
-for contour in contours:
-    if cv2.contourArea(contour) > 1000:
-        print(cv2.contourArea(contour))
-        warped = cv2.drawContours(warped, contour, -1, (0, 0, 255), 2)
+for i in range(len(contours)):
+    contour = contours[i]
+    area = cv2.contourArea(contour)
+    #ignore small contours
+    if area < 1000:
+        continue
+    #ignore outer contours
+    if hierarchy[0][i][3] < 0:
+        continue
+
+    cm_2_area = (area/pixels_per_mm_sq)/100
+    cv2.drawContours(warped, contour, -1, (0, 0, 255), 2)
+    x,y,w,h = cv2.boundingRect(contour)
+    cv2.rectangle(warped,(x,y),(x+w,y+h),(0,255,0),2)
+    cv2.putText(warped,
+                "{:.1f}".format(cm_2_area),
+                (int(x+w/4),int(y+h/2)), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                .5,(255,255,255),1)
+
+
+    
 
 cv2.imshow("warped", warped)
 
@@ -121,11 +188,6 @@ warp_height, warp_width, _ = warped.shape
 
 print(warp_height)
 print(warp_width)
-
-
-
-
-cv2.imshow("detection", edged)
 
 
 cv2.imshow("image", frame)
