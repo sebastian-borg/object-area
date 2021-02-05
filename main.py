@@ -54,7 +54,7 @@ def four_point_transform(image, pts):
     return cv2.rectangle(frame, (int(pt_1[0]),int(pt_1[1])), (int(pt_2[0]),int(pt_2[1])), color=(0, 0, 255), thickness=3)
  """
 ##########################################################################################################################################
-frame = cv2.imread("test_img_3/File_015.jpeg")
+frame = cv2.imread("test_img_3/File_000.jpeg")
 
 frame = cv2.resize(frame, (0,0), None,0.25,0.25)
 
@@ -134,10 +134,9 @@ h, s, v = cv2.split(frame_hsv)
 
 
 # code for shifting
-#s = (s + 30) % 180
+#s = (s - 30) % 180
 
-cv2.imshow("h", h)
-cv2.imshow("v", v)
+
 
 """ 
 funkar ganska bra
@@ -146,19 +145,57 @@ cv2.imshow("s", s)
 canny_s = cv2.Canny(s, 100, 50) 
 
 """
+""" h = cv2.GaussianBlur(h, (7, 7), 0)
+cv2.imshow("h", h)
+canny_h = cv2.Canny(h, 100, 50) 
+canny_h[:, :] = 0
+cv2.imshow("canny_h", canny_h) 
+"""
+canny_h = h
+canny_h[:, :] = 0
+
+v = cv2.GaussianBlur(v, (7, 7), 0)
+cv2.imshow("v", v)
+canny_v = cv2.Canny(v, 200, 100) 
+cv2.imshow("canny_v", canny_v)
 
 s = cv2.GaussianBlur(s, (7, 7), 0)
 cv2.imshow("s", s)
 canny_s = cv2.Canny(s, 100, 50)
+cv2.imshow("canny_s", canny_s)
 
 #canny_s = cv2.Canny(s,255, 255/3)
 canny_s = cv2.dilate(canny_s, None, iterations=1)
-cv2.imshow("canny_s", canny_s)
+canny_s = cv2.erode(canny_s, None, iterations=1)
+
+canny_v = cv2.dilate(canny_v, None, iterations=1)
+canny_v = cv2.erode(canny_v, None, iterations=1)
 
 
-contours, hierarchy  = cv2.findContours(canny_s.copy(), cv2.RETR_TREE ,
+canny_all = cv2.merge([canny_h,canny_s, canny_v])
+
+canny_all_gray = cv2.cvtColor(canny_all, cv2.COLOR_BGR2GRAY)
+
+canny_all_gray = cv2.dilate(canny_all_gray, None, iterations=1)
+canny_all_gray = cv2.erode(canny_all_gray, None, iterations=1)
+cv2.imshow("canny_all", canny_all_gray)
+
+
+contours, hierarchy  = cv2.findContours(canny_all_gray.copy(), cv2.RETR_TREE ,
 	cv2.CHAIN_APPROX_SIMPLE)
 
+
+""" contours_v, hierarchy_v  = cv2.findContours(canny_v.copy(), cv2.RETR_TREE ,
+	cv2.CHAIN_APPROX_SIMPLE)
+
+
+contours_s, hierarchy_s  = cv2.findContours(canny_s.copy(), cv2.RETR_TREE ,
+	cv2.CHAIN_APPROX_SIMPLE)
+
+contours = np.concatenate((contours_v, contours_s), axis=None)
+hierarchy = np.concatenate((hierarchy_v, hierarchy_s), axis=None)
+
+ """
 for i in range(len(contours)):
     contour = contours[i]
     area = cv2.contourArea(contour)
@@ -184,13 +221,8 @@ for i in range(len(contours)):
 
 cv2.imshow("warped", warped)
 
-warp_height, warp_width, _ = warped.shape
 
-print(warp_height)
-print(warp_width)
-
-
-cv2.imshow("image", frame)
+#cv2.imshow("image", frame)
 
 cv2.waitKey()
 cv2.destroyAllWindows()
